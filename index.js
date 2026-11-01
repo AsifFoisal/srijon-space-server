@@ -23,14 +23,14 @@ export async function connectToMongoDB() {
 const mongoClient = await connectToMongoDB();
 const db = mongoClient.db("srijonspace")
 const studiosCollection = db.collection("studios")
+const bookingsCollection = db.collection("bookings")
 
 app.get('/', (req, res) => {
     res.send({ message: "Hello" })
 })
 
-app.post("/add-studio", async (req, res) => {
-    const data = req.body;
-    const result = await studiosCollection.insertOne(data);
+app.get("/studios", async (req, res) => {
+    const result = await studiosCollection.find({}).toArray();
     res.send(result);
 });
 
@@ -46,6 +46,25 @@ app.get("/studio/:id", async (req, res) => {
     res.send(result);
 });
 
+app.get("/my-bookings/:email", async (req, res) => {
+    const { email } = req.params;
+    const result = await bookingsCollection.find({ userEmail: email }).toArray();
+    res.send(result);
+});
+
+app.post("/add-studio", async (req, res) => {
+    const data = req.body;
+    const result = await studiosCollection.insertOne(data);
+    res.send(result);
+});
+
+app.post("/my-bookings", async (req, res) => {
+    const data = req.body;
+    const result = await bookingsCollection.insertOne(data);
+    res.send(result);
+});
+
+
 app.patch("/my-studios/:id", async (req, res) => {
     const { id } = req.params;
     const result = await studiosCollection.updateOne({ _id: new ObjectId(id) },{ $set: req.body },
@@ -56,6 +75,14 @@ app.patch("/my-studios/:id", async (req, res) => {
 app.delete("/my-studios/:id", async (req, res) => {
     const { id } = req.params;
     const result = await studiosCollection.deleteOne({
+        _id: new ObjectId(id),
+    });
+    res.send(result);
+});
+
+app.delete("/my-bookings/:id", async (req, res) => {
+    const { id } = req.params;
+    const result = await bookingsCollection.deleteOne({
         _id: new ObjectId(id),
     });
     res.send(result);

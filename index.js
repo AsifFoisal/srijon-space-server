@@ -30,7 +30,12 @@ app.get('/', (req, res) => {
 })
 
 app.get("/studios", async (req, res) => {
-    const result = await studiosCollection.find({}).toArray();
+    const limit = Number(req.query.limit) || 0;
+    let query = studiosCollection.find({});
+    if (limit > 0) {
+        query = query.sort({ createdAt: -1, _id: -1 }).limit(limit);
+    }
+    const result = await query.toArray();
     res.send(result);
 });
 
@@ -61,6 +66,15 @@ app.post("/add-studio", async (req, res) => {
 app.post("/my-bookings", async (req, res) => {
     const data = req.body;
     const result = await bookingsCollection.insertOne(data);
+    res.send(result);
+});
+
+app.patch("/my-bookings/:id", async (req, res) => {
+    const { id } = req.params;
+    const result = await bookingsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: req.body }
+    );
     res.send(result);
 });
 

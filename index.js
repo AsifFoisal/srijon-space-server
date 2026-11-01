@@ -25,6 +25,17 @@ const db = mongoClient.db("srijonspace")
 const studiosCollection = db.collection("studios")
 const bookingsCollection = db.collection("bookings")
 
+
+const verifyApi = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    console.log(authHeader);
+    if (!authHeader) {
+        return res.status(401).json({ message: "Unauthorized" });
+    }
+    next();
+}
+
+
 app.get('/', (req, res) => {
     res.send({ message: "Hello" })
 })
@@ -45,7 +56,7 @@ app.get("/my-studios/:email", async (req, res) => {
     res.send(result);
 });
 
-app.get("/studio/:id", async (req, res) => {
+app.get("/studio/:id", verifyApi, async (req, res) => {
     const { id } = req.params;
     const result = await studiosCollection.findOne({_id: new ObjectId(id),});
     res.send(result);

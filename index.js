@@ -25,6 +25,7 @@ const mongoClient = await connectToMongoDB();
 const db = mongoClient.db("srijonspace")
 const studiosCollection = db.collection("studios")
 const bookingsCollection = db.collection("bookings")
+const reviewsCollection = db.collection("reviews")
 
 
 const verifyToken = async(req, res, next) => {
@@ -56,13 +57,34 @@ app.get('/', (req, res) => {
     res.send({ message: "Hello" })
 })
 
+const ratingPipeline = [
+    {
+        $lookup: {
+            from: "reviews",
+            localField: "_id",
+            foreignField: "studioId",
+            as: "reviews",
+        },
+    },
+    {
+        $addFields: {
+            rating: {
+                $cond: [
+                    { $gt: [{ $size: "$reviews" }, 0] },
+                    { $round: [{ $avg: "$reviews.rating" }, 1] },
+                    null,
+                ],
+            },
+            reviewCount: { $size: "$reviews" },
+        },
+    },
+    { $unset: "reviews" },
+];
+
 app.get("/studios", async (req, res) => {
     const limit = Number(req.query.limit) || 0;
-    let query = studiosCollection.find({});
-    if (limit > 0) {
-        query = query.sort({ createdAt: -1, _id: -1 }).limit(limit);
-    }
-    const result = await query.toArray();
+    const base = limit > 0 ? [{ $sort: { createdAt: -1, _id: -1 } }, { $limit: limit }] : [];
+    const result = await studiosCollection.aggregate([...base, ...ratingPipeline]).toArray();
     res.send(result);
 });
 
@@ -74,8 +96,10 @@ app.get("/my-studios/:email", verifyToken, async (req, res) => {
 
 app.get("/studios/:id",verifyToken, async (req, res) => {
     const { id } = req.params;
-    const result = await studiosCollection.findOne({_id: new ObjectId(id),});
-    res.send(result);
+    const [result] = await studiosCollection
+        .aggregate([{ $match: { _id: new ObjectId(id) } }, ...ratingPipeline])
+        .toArray();
+    res.send(result ?? null);
 });
 
 app.get("/my-bookings/:email", verifyToken, async (req, res) => {
@@ -127,6 +151,47 @@ app.delete("/my-bookings/:id", verifyToken, async (req, res) => {
     const result = await bookingsCollection.deleteOne({
         _id: new ObjectId(id),
     });
+    res.send(result);
+});
+
+app.get("/studios/:id/reviews", verifyToken, async (req, res) => {
+    const { id } = req.params;
+    const result = await reviewsCollection
+        .find({ studioId: new ObjectId(id) })
+        .sort({ createdAt: -1 })
+        .toArray();
+    res.send(result);
+});
+
+app.post("/studios/:id/reviews", verifyToken, async (req, res) => {
+    const { id } = req.params;
+    const { rating, text, name, email, avatar } = req.body;
+    const result = await reviewsCollection.updateOne(
+        { studioId: new ObjectId(id), email },
+        {
+            $set: {
+                studioId: new ObjectId(id),
+                name,
+                email,
+                avatar,
+                rating: Number(rating),
+                text,
+                createdAt: new Date(),
+            },
+        },
+        { upsert: true }
+    );
+    res.send(result);
+});
+
+app.get("/host-bookings/:email", verifyToken, async (req, res) => {
+    const { email } = req.params;
+    const studios = await studiosCollection.find({ ownerEmail: email }).toArray();
+    const ids = studios.map((studio) => String(studio._id));
+    const result = await bookingsCollection
+        .find({ studioId: { $in: ids } })
+        .sort({ createdAt: -1 })
+        .toArray();
     res.send(result);
 });
 

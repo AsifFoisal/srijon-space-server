@@ -104,6 +104,7 @@ app.get("/studios/:id",verifyToken, async (req, res) => {
 
 app.get("/my-bookings/:email", verifyToken, async (req, res) => {
     const { email } = req.params;
+    await completePastBookings();
     const result = await bookingsCollection.find({ userEmail: email }).toArray();
     res.send(result);
 });
@@ -114,14 +115,38 @@ app.post("/add-studio", verifyToken,async (req, res) => {
     res.send(result);
 });
 
+// Bangladesh local date/time (the site's timezone) for the past-booking check.
+function dhakaNow() {
+    return new Date(Date.now() + 6 * 60 * 60 * 1000);
+}
+
+// When a booking's session time has passed, it is automatically completed.
+async function completePastBookings() {
+    const now = dhakaNow();
+    const today = now.toISOString().slice(0, 10);
+    const time = now.toISOString().slice(11, 16);
+    await bookingsCollection.updateMany(
+        {
+            status: { $in: ["Pending", "Confirmed"] },
+            $or: [
+                { date: { $lt: today } },
+                { date: today, endTime: { $lte: time } },
+            ],
+        },
+        { $set: { status: "Completed" } }
+    );
+}
+
 app.post("/my-bookings",verifyToken, async (req, res) => {
     const data = req.body;
-    // Double-booking prevention: reject the slot if a Confirmed booking for
-    // this studio and date already overlaps it (times are "HH:MM" strings).
+    await completePastBookings();
+    // Double-booking prevention: reject the slot if a Pending or Confirmed
+    // booking for this studio and date already overlaps it (times are
+    // "HH:MM" strings, so plain string comparison is safe).
     const clash = await bookingsCollection.findOne({
         studioId: data.studioId,
         date: data.date,
-        status: "Confirmed",
+        status: { $in: ["Pending", "Confirmed"] },
         startTime: { $lt: data.endTime },
         endTime: { $gt: data.startTime },
     });
@@ -200,6 +225,7 @@ app.post("/studios/:id/reviews", verifyToken, async (req, res) => {
 
 app.get("/host-bookings/:email", verifyToken, async (req, res) => {
     const { email } = req.params;
+    await completePastBookings();
     const studios = await studiosCollection.find({ ownerEmail: email }).toArray();
     const ids = studios.map((studio) => String(studio._id));
     const result = await bookingsCollection

@@ -99,7 +99,7 @@ app.get("/studios/:id",verifyToken, async (req, res) => {
     const [result] = await studiosCollection
         .aggregate([{ $match: { _id: new ObjectId(id) } }, ...ratingPipeline])
         .toArray();
-    res.send(result ?? null);
+    res.json(result ?? null);
 });
 
 app.get("/my-bookings/:email", verifyToken, async (req, res) => {

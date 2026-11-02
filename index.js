@@ -2,6 +2,7 @@ import express from "express";
 import { MongoClient, ObjectId } from 'mongodb';
 import cors from 'cors';
 import 'dotenv/config'
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const app = express()
 const PORT = 8000
@@ -26,12 +27,27 @@ const studiosCollection = db.collection("studios")
 const bookingsCollection = db.collection("bookings")
 
 
-const verifyApi = (req, res, next) => {
+const verifyToken = async(req, res, next) => {
     const authHeader = req.headers.authorization;
-    console.log(authHeader);
     if (!authHeader) {
         return res.status(401).json({ message: "Unauthorized" });
     }
+
+    const token = authHeader.split(" ")[1];
+    
+    if(!token) {
+        return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const JWKS = createRemoteJWKSet(new URL(`${process.env.NEXT_PUBLIC_AUTH_URL}/api/auth/jwks`));
+
+    try{
+        const { payload } = await jwtVerify(token, JWKS)
+    }
+    catch(err){
+        return res.status(401).json({ message: "Server Error" });
+    }
+
     next();
 }
 
@@ -50,37 +66,37 @@ app.get("/studios", async (req, res) => {
     res.send(result);
 });
 
-app.get("/my-studios/:email", async (req, res) => {
+app.get("/my-studios/:email", verifyToken, async (req, res) => {
     const { email } = req.params;
     const result = await studiosCollection.find({ ownerEmail: email }).toArray();
     res.send(result);
 });
 
-app.get("/studio/:id", verifyApi, async (req, res) => {
+app.get("/studios/:id",verifyToken, async (req, res) => {
     const { id } = req.params;
     const result = await studiosCollection.findOne({_id: new ObjectId(id),});
     res.send(result);
 });
 
-app.get("/my-bookings/:email", async (req, res) => {
+app.get("/my-bookings/:email", verifyToken, async (req, res) => {
     const { email } = req.params;
     const result = await bookingsCollection.find({ userEmail: email }).toArray();
     res.send(result);
 });
 
-app.post("/add-studio", async (req, res) => {
+app.post("/add-studio", verifyToken,async (req, res) => {
     const data = req.body;
     const result = await studiosCollection.insertOne(data);
     res.send(result);
 });
 
-app.post("/my-bookings", async (req, res) => {
+app.post("/my-bookings",verifyToken, async (req, res) => {
     const data = req.body;
     const result = await bookingsCollection.insertOne(data);
     res.send(result);
 });
 
-app.patch("/my-bookings/:id", async (req, res) => {
+app.patch("/my-bookings/:id", verifyToken, async (req, res) => {
     const { id } = req.params;
     const result = await bookingsCollection.updateOne(
         { _id: new ObjectId(id) },
@@ -90,14 +106,15 @@ app.patch("/my-bookings/:id", async (req, res) => {
 });
 
 
-app.patch("/my-studios/:id", async (req, res) => {
+
+app.patch("/my-studios/:id", verifyToken, async (req, res) => {
     const { id } = req.params;
     const result = await studiosCollection.updateOne({ _id: new ObjectId(id) },{ $set: req.body },
     );
     res.send(result);
 });
 
-app.delete("/my-studios/:id", async (req, res) => {
+app.delete("/my-studios/:id", verifyToken, async (req, res) => {
     const { id } = req.params;
     const result = await studiosCollection.deleteOne({
         _id: new ObjectId(id),
@@ -105,7 +122,7 @@ app.delete("/my-studios/:id", async (req, res) => {
     res.send(result);
 });
 
-app.delete("/my-bookings/:id", async (req, res) => {
+app.delete("/my-bookings/:id", verifyToken, async (req, res) => {
     const { id } = req.params;
     const result = await bookingsCollection.deleteOne({
         _id: new ObjectId(id),

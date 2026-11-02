@@ -116,6 +116,20 @@ app.post("/add-studio", verifyToken,async (req, res) => {
 
 app.post("/my-bookings",verifyToken, async (req, res) => {
     const data = req.body;
+    // Double-booking prevention: reject the slot if a Confirmed booking for
+    // this studio and date already overlaps it (times are "HH:MM" strings).
+    const clash = await bookingsCollection.findOne({
+        studioId: data.studioId,
+        date: data.date,
+        status: "Confirmed",
+        startTime: { $lt: data.endTime },
+        endTime: { $gt: data.startTime },
+    });
+    if (clash) {
+        return res.status(409).json({
+            message: "That time slot is already booked for this studio. Please pick a different slot.",
+        });
+    }
     const result = await bookingsCollection.insertOne(data);
     res.send(result);
 });
